@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Acceso Protegido</title>
+<style>
+  body {
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    background:#111;
+    color:#fff;
+    font-family:sans-serif;
+    flex-direction:column;
+  }
+  input {
+    padding:10px;
+    font-size:16px;
+    margin-bottom:10px;
+    border-radius:5px;
+    border:none;
+  }
+  button {
+    padding:10px 20px;
+    font-size:16px;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    background:#0f0;
+    color:#000;
+  }
+  button:hover { background:#0c0; }
+  .error { color:red; margin-top:5px; display:none; }
+</style>
+</head>
+<body>
+  <h2>Ingrese la contraseña</h2>
+  <input type="password" id="pwd" placeholder="Contraseña">
+  <button onclick="checkPassword()">Entrar</button>
+  <div class="error" id="error">Contraseña incorrecta</div>
+
+<script>
+const PASSWORD = "Rijat1916"; 
+
+function checkPassword(){
+  const input = document.getElementById("pwd").value;
+  if(input === PASSWORD){
+    sessionStorage.setItem("accessGranted", "true");
+    window.location.href = "index.html"; 
+  } else {
+    const error = document.getElementById("error");
+    error.style.display = "block";
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>KIKI'S ROOM</title> 
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="https://i.pinimg.com/736x/3e/9e/91/3e9e91cd4f5d2fd3bbca4a30cc043cbb.jpg">
+<script>
+// Protección con contraseña
+if(sessionStorage.getItem("accessGranted") !== "true"){
+    window.location.href = "check.html";
+}
+</script>
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Press Start 2P', cursive;
+        background: radial-gradient(ellipse at bottom, #0b0c1b 0%, #090a0f 100%);
+        overflow: hidden;
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        perspective: 800px;
+    }
+
+    .room {
+        position: relative;
+        width: 800px;
+        height: 500px;
+        background: rgba(10,10,30,0.85);
+        border: 5px solid #00ffcc;
+        border-radius: 20px;
+        box-shadow: 0 0 30px #00ffcc, inset 0 0 15px #00ffcc;
+        overflow: hidden;
+    }
+
+    #roomStars {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+        pointer-events: none;
+    }
+
+    .alien {
+        position: absolute;
+        bottom: 10px;
+        left: 50px;
+        width: 250px;
+        height: 250px;
+        background-image: url('alien.png'); 
+        background-size: contain;
+        background-repeat: no-repeat;
+        cursor: pointer;
+        animation: floatAlien 3s ease-in-out infinite, blink 7s infinite;
+        z-index: 2;
+    }
+
+    @keyframes floatAlien {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+    }
+
+    @keyframes blink {
+        0%, 90%, 100% { filter: brightness(1); }
+        95% { filter: brightness(0.3); }
+    }
+
+    .speech {
+        position: absolute;
+        bottom: 220px;
+        left: 60px;
+        background: rgba(255,255,255,0.9);
+        color: #000;
+        padding: 10px 15px;
+        border-radius: 10px;
+        font-size: 14px;
+        display: none;
+        width: 220px;
+        text-align: center;
+        z-index: 3;
+    }
+
+    .object {
+        position: absolute;
+        background-size: contain;
+        background-repeat: no-repeat;
+        animation: floatObject linear infinite;
+        z-index: 2;
+    }
+
+    @keyframes floatObject {
+        0% { transform: translate3d(0,0,0) rotate(0deg); }
+        50% { transform: translate3d(0,-30px,0) rotate(15deg); }
+        100% { transform: translate3d(0,0,0) rotate(0deg); }
+    }
+
+    .link-button {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        background-color: #00ffcc;
+        color: #000;
+        text-decoration: none;
+        border: 3px solid #fff;
+        box-shadow: 3px 3px 0 #fff;
+        transition: 0.3s;
+        z-index: 3;
+    }
+    .link-button:hover { 
+        background-color: #ff69b4;
+        color: #fff;
+        transform: scale(1.1);
+    }
+
+    canvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 0;
+    }
+
+    .tooltip {
+        position: absolute;
+        display: none;
+        background: rgba(255,255,255,0.9);
+        color: #000;
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-size: 14px;
+        pointer-events: none;
+        z-index: 3;
+    }
+</style>
+</head>
+<body>
+
+<canvas id="space"></canvas>
+
+<div class="room">
+    <canvas id="roomStars"></canvas>
+    
+    <div class="alien" id="alien"></div>
+    <div class="speech" id="speech">
+        Hola Kikito,<br>
+        te hice esta página<br>
+        porque te quiero mucho, muchote
+    </div>
+    
+    <div class="object" id="objeto1" style="top:50px; left:400px; width:150px; height:150px; background-image:url('us.jpg'); animation-duration: 6s;"></div>
+    <div class="tooltip" id="tooltip1">nosotros ♡</div>
+
+    <div class="object" style="top:120px; left:600px; width:150px; height:200px; background-image:url('des.png'); animation-duration: 7s;"></div>
+    <div class="object" style="top:220px; left:300px; width:200px; height:200px; background-image:url('retro.png'); animation-duration: 8s;"></div>
+    <div class="object" style="top:50px; left:150px; width:150px; height:150px; background-image:url('pos.jpg'); animation-duration: 5s;"></div>
+    <div class="object" style="top:200px; left:500px; width:170px; height:170px; background-image:url('cam.png'); animation-duration: 9s;"></div>
+    <div class="object" id="objeto2" style="bottom:-50px; left:350px; width:200px; height:200px; background-image:url('conso.png'); animation-duration: 10s;"></div>
+    <div class="tooltip" id="tooltip2">juguemos!!</div>
+    <div class="object" style="bottom:40px; right:100px; width:100px; height:100px; background-image:url('balo.png'); animation-duration: 12s;"></div>
+
+    <a href="juega.html" class="link-button">[♥] AMOR</a>
+</div>
+
+<script>
+    // Resto del script permanece igual
+    const objeto1 = document.getElementById('objeto1');
+    const tooltip1 = document.getElementById('tooltip1');
+    objeto1.addEventListener('mouseenter', (e) => {
+        tooltip1.style.display = 'block';
+        tooltip1.style.left = e.pageX + 10 + 'px';
+        tooltip1.style.top = e.pageY + 10 + 'px';
+    });
+    objeto1.addEventListener('mousemove', (e) => {
+        tooltip1.style.left = e.pageX + 10 + 'px';
+        tooltip1.style.top = e.pageY + 10 + 'px';
+    });
+    objeto1.addEventListener('mouseleave', () => {
+        tooltip1.style.display = 'none';
+    });
+
+    const objeto2 = document.getElementById('objeto2');
+    const tooltip2 = document.getElementById('tooltip2');
+    objeto2.addEventListener('mouseenter', (e) => {
+        tooltip2.style.display = 'block';
+        tooltip2.style.left = e.pageX + 10 + 'px';
+        tooltip2.style.top = e.pageY + 10 + 'px';
+    });
+    objeto2.addEventListener('mousemove', (e) => {
+        tooltip2.style.left = e.pageX + 10 + 'px';
+        tooltip2.style.top = e.pageY + 10 + 'px';
+    });
+    objeto2.addEventListener('mouseleave', () => {
+        tooltip2.style.display = 'none';
+    });
+
+    const alien = document.getElementById('alien');
+    const speech = document.getElementById('speech');
+    alien.addEventListener('mouseenter', () => { speech.style.display = 'block'; });
+    alien.addEventListener('mouseleave', () => { speech.style.display = 'none'; });
+
+    const canvas = document.getElementById('space');
+    const ctx = canvas.getContext('2d');
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+
+    const stars = [];
+    const numStars = 200;
+    for(let i=0;i<numStars;i++){
+        stars.push({x:Math.random()*width, y:Math.random()*height, z:Math.random()*width, size:Math.random()*2+0.5, speed:Math.random()*0.02+0.01});
+    }
+
+    function drawStars(){
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0,0,width,height);
+        const gradient = ctx.createRadialGradient(width/2,height/2,0,width/2,height/2,width/2);
+        gradient.addColorStop(0,'rgba(255,0,255,0.08)');
+        gradient.addColorStop(0.5,'rgba(0,255,255,0.06)');
+        gradient.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0,0,width,height);
+        for(let i=0;i<stars.length;i++){
+            const s=stars[i];
+            const k=128.0/s.z;
+            const x=(s.x-width/2)*k+width/2;
+            const y=(s.y-height/2)*k+height/2;
+            const size=s.size*k;
+            ctx.beginPath();
+            ctx.fillStyle='white';
+            ctx.arc(x,y,size,0,Math.PI*2);
+            ctx.fill();
+            s.z-=s.speed*width;
+            if(s.z<=1){s.z=width; s.x=Math.random()*width; s.y=Math.random()*height;}
+        }
+        requestAnimationFrame(drawStars);
+    }
+    drawStars();
+    window.addEventListener('resize',()=>{width=canvas.width=window.innerWidth; height=canvas.height=window.innerHeight;});
+
+    const roomCanvas = document.getElementById('roomStars');
+    const roomCtx = roomCanvas.getContext('2d');
+    roomCanvas.width = 800;
+    roomCanvas.height = 500;
+
+    const roomStars = [];
+    const numRoomStars = 100;
+    for(let i=0;i<numRoomStars;i++){
+        roomStars.push({x:Math.random()*roomCanvas.width, y:Math.random()*roomCanvas.height, size:Math.random()*2+0.5, speed:Math.random()*0.5+0.1});
+    }
+
+    function drawRoomStars(){
+        roomCtx.clearRect(0,0,roomCanvas.width,roomCanvas.height);
+        for(let i=0;i<roomStars.length;i++){
+            const s = roomStars[i];
+            roomCtx.beginPath();
+            roomCtx.fillStyle = 'white';
+            roomCtx.arc(s.x,s.y,s.size,0,Math.PI*2);
+            roomCtx.fill();
+            s.y-=s.speed;
+            if(s.y<0) s.y=roomCanvas.height;
+        }
+        requestAnimationFrame(drawRoomStars);
+    }
+    drawRoomStars();
+</script>
+
+</body>
+</html>
+

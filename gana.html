@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kiki's Love</title>
+<link rel="icon" type="image/png" href="https://i.pinimg.com/1200x/9a/0a/00/9a0a0083e45812bc1ccb959f553ebff2.jpg">
+<script>
+if(sessionStorage.getItem("accessGranted") !== "true"){
+    window.location.href = "check.html";
+}
+</script>
+
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; font-family:system-ui, sans-serif; }
+  body {
+    background: radial-gradient(circle at 30% 30%, #220022, #000000 80%);
+    position:relative;
+  }
+  canvas { 
+    display:block; margin:0 auto; border-radius:12px; position:relative; z-index:2;
+  }
+  .hud { 
+    color:#fff; text-align:center; position:relative; z-index:2; margin-top:8px;
+  }
+  #space-bg {
+    position:fixed; top:0; left:0; width:100%; height:100%; z-index:1; overflow:hidden;
+  }
+  .planet {
+    position:absolute; border-radius:50%;
+    background: radial-gradient(circle, #ff88cc, #880055);
+    opacity:0.4;
+  }
+</style>
+</head>
+<body>
+<div id="space-bg"></div>
+<canvas id="game" width="960" height="540"></canvas>
+<div class="hud">
+  Mover: W/A/S/D • Atacar: M • Abrazar: E
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const WIDTH = canvas.width, HEIGHT = canvas.height;
+
+  const rand = (a,b)=>Math.random()*(b-a)+a;
+  const clamp = (v,min,max)=>Math.max(min, Math.min(max, v));
+  const dist = (a,b)=>Math.hypot(a.x-b.x, a.y-b.y);
+
+  const keys = new Set();
+  addEventListener('keydown', e => keys.add(e.key.toLowerCase()));
+  addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+
+  const world = { enemies:[], particles:[], win:false, hugProgress:0, heartScale:1, stars:[], hearts:[] };
+
+  const player = { x:100, y:HEIGHT/2, r:12, speed:160, cd:0, dmg:3, name:"KIKI", attacking:false };
+  const girl = { x:WIDTH-120, y:HEIGHT/2, r:14, name:"JATI" };
+
+  const enemyColors = ['#ff7f7f','#ffb07f','#ff7fb0','#b07fff','#7fb0ff'];
+
+  for(let i=0;i<150;i++){
+    world.stars.push({ x:rand(0,WIDTH), y:rand(0,HEIGHT), r:rand(0.5,2), brightness:rand(0.5,1) });
+  }
+
+  const spaceBg = document.getElementById('space-bg');
+  const planets=[];
+  for(let i=0;i<5;i++){
+    const p=document.createElement('div');
+    p.className='planet';
+    const size=rand(50,120);
+    p.style.width=size+'px'; p.style.height=size+'px';
+    p.style.top=rand(0,window.innerHeight)+'px';
+    p.style.left=rand(0,window.innerWidth)+'px';
+    spaceBg.appendChild(p);
+    planets.push({el:p, x:parseFloat(p.style.left), y:parseFloat(p.style.top), vx:rand(-5,5), vy:rand(-2,2)});
+  }
+
+  let lastPlayerPos = {x: player.x, y: player.y};
+
+  function spawnEnemies(){
+    world.enemies.length = 0;
+    for(let i=0;i<5;i++){
+      world.enemies.push({ 
+        x: rand(200, WIDTH-200), y: rand(50, HEIGHT-50), r:12, hp:5, spd:50,
+        color: enemyColors[i%enemyColors.length], name:'niña'+(i+1)
+      });
+    }
+  }
+  spawnEnemies();
+
+  function createParticles(x,y,color,count){
+    for(let i=0;i<count;i++){
+      world.particles.push({ x, y, vx:rand(-80,80), vy:rand(-80,80), life:0.3+Math.random()*0.2, color });
+    }
+  }
+
+  function createHearts(x,y,count){
+    for(let i=0;i<count;i++){
+      world.hearts.push({
+        x, y, vx:rand(-50,50), vy:rand(-100,-50),
+        scale:rand(0.3,0.7), life:1+Math.random()*0.5
+      });
+    }
+  }
+
+  // Cargar imágenes de los jugadores y espada
+  const kikiImg = new Image(); kikiImg.src = 'kiki.png';
+  const jatiImg = new Image(); jatiImg.src = 'jati.png';
+  const swordImg = new Image(); swordImg.src = 'sword.png';
+  const imgSize = 64; // tamaño grande para cuerpo
+
+  let last = performance.now();
+
+  function update(dt){
+    let dx = player.x - lastPlayerPos.x;
+    let dy = player.y - lastPlayerPos.y;
+    lastPlayerPos.x = player.x;
+    lastPlayerPos.y = player.y;
+
+    for(const s of world.stars){
+      s.x -= dx * 0.1;
+      s.y -= dy * 0.1;
+      if(s.x<0) s.x=WIDTH;
+      if(s.x>WIDTH) s.x=0;
+      if(s.y<0) s.y=HEIGHT;
+      if(s.y>HEIGHT) s.y=0;
+    }
+
+    for(const p of planets){
+      p.x -= dx * 0.05 + p.vx*dt;
+      p.y -= dy * 0.05 + p.vy*dt;
+      if(p.x>window.innerWidth) p.x=-parseFloat(p.el.style.width);
+      if(p.x<-parseFloat(p.el.style.width)) p.x=window.innerWidth;
+      if(p.y>window.innerHeight) p.y=-parseFloat(p.el.style.height);
+      if(p.y<-parseFloat(p.el.style.height)) p.y=window.innerHeight;
+      p.el.style.left=p.x+'px';
+      p.el.style.top=p.y+'px';
+    }
+
+    if(world.win){
+      world.hugProgress = Math.min(1, world.hugProgress + dt*2);
+      player.x += (girl.x - 40 - player.x)*0.1*dt*60;
+      player.y += (girl.y - player.y)*0.1*dt*60;
+      girl.x += (player.x + 40 - girl.x)*0.1*dt*60;
+      girl.y += (player.y - girl.y)*0.1*dt*60;
+      world.heartScale = 1 + 0.1*Math.sin(world.hugProgress*10);
+
+      if(world.hugProgress>=0.5 && world.hearts.length===0){
+        createHearts((player.x+girl.x)/2, (player.y+girl.y)/2, 30);
+      }
+      return;
+    }
+
+    let mx = (keys.has('d')?1:0)-(keys.has('a')?1:0);
+    let my = (keys.has('s')?1:0)-(keys.has('w')?1:0);
+    const len = Math.hypot(mx,my)||1; mx/=len; my/=len;
+    player.x = clamp(player.x + mx*player.speed*dt, 16, WIDTH-16);
+    player.y = clamp(player.y + my*player.speed*dt, 16, HEIGHT-16);
+
+    player.cd = Math.max(0, player.cd - dt);
+    player.attacking = keys.has('m');
+    if(player.attacking && player.cd<=0){
+      player.cd=0.25;
+      for(let i=world.enemies.length-1;i>=0;i--){
+        const e=world.enemies[i];
+        if(dist(player,e)<player.r+e.r+25){
+          e.hp-=player.dmg;
+          createParticles(e.x,e.y,'#a64dff',8);
+          if(e.hp<=0) world.enemies.splice(i,1);
+        }
+      }
+    }
+
+    for(const e of world.enemies){
+      const angle = Math.atan2(player.y - e.y, player.x - e.x);
+      e.x += Math.cos(angle)*e.spd*dt;
+      e.y += Math.sin(angle)*e.spd*dt;
+    }
+
+    for(let i=world.particles.length-1;i>=0;i--){
+      const p=world.particles[i];
+      p.life-=dt;
+      p.x+=p.vx*dt; p.y+=p.vy*dt;
+      if(p.life<=0) world.particles.splice(i,1);
+    }
+
+    for(let i=world.hearts.length-1;i>=0;i--){
+      const h=world.hearts[i];
+      h.life-=dt;
+      h.x+=h.vx*dt; h.y+=h.vy*dt;
+      if(h.life<=0) world.hearts.splice(i,1);
+    }
+
+    if(dist(player,girl)<player.r+girl.r+10 && keys.has('e') && world.enemies.length===0){
+      world.win = true;
+    }
+  }
+
+  function drawCharacter(x,y,hairColor,bodyColor,isGirl,name){
+    // Solo se usa para enemigos, los jugadores usan imagen
+    ctx.fillStyle = hairColor;
+    ctx.fillRect(x-8,y-18,16,10);
+    ctx.fillStyle = '#f5e1d2';
+    ctx.beginPath(); ctx.arc(x,y-12,8,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(x-7,y-4,14,18);
+    ctx.fillRect(x-12,y-4,5,14); ctx.fillRect(x+7,y-4,5,14);
+    if(!isGirl){ ctx.strokeStyle='#cccccc'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(x+7,y+4); ctx.lineTo(x+20,y+4); ctx.stroke(); }
+    ctx.fillStyle='#fff'; ctx.font='14px system-ui, sans-serif'; ctx.textAlign='center'; ctx.fillText(name,x,y-26);
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,WIDTH,HEIGHT);
+
+    for(const s of world.stars){
+      ctx.fillStyle = `rgba(255,255,255,${s.brightness})`;
+      ctx.beginPath();
+      ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill();
+    }
+
+    for(const p of world.particles){
+      ctx.fillStyle=p.color;
+      ctx.fillRect(p.x-2,p.y-2,4,4);
+    }
+
+    for(const h of world.hearts){
+      ctx.fillStyle='pink';
+      ctx.beginPath();
+      ctx.moveTo(h.x,h.y);
+      const s=h.scale*20;
+      ctx.bezierCurveTo(h.x,h.y-s/2,h.x-s,h.y-s/2,h.x-s,h.y);
+      ctx.bezierCurveTo(h.x-s,h.y+s,h.x,h.y+s,h.x,h.y+s*1.2);
+      ctx.bezierCurveTo(h.x,h.y+s,h.x+s,h.y+s/2,h.x+s,h.y);
+      ctx.bezierCurveTo(h.x+s,h.y-s/2,h.x,h.y-s/2,h.x,h.y);
+      ctx.fill();
+    }
+
+    for(const e of world.enemies) drawCharacter(e.x,e.y,'#333333',e.color,true,e.name);
+
+    // Dibujar jugadores con imagen
+    ctx.drawImage(kikiImg, player.x - imgSize/2, player.y - imgSize/2, imgSize, imgSize);
+    ctx.drawImage(jatiImg, girl.x - imgSize/2, girl.y - imgSize/2, imgSize, imgSize);
+
+    // Nombres sobre la cabeza
+    ctx.fillStyle='#fff';
+    ctx.font='18px system-ui, sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText(player.name, player.x, player.y - imgSize/2 - 10);
+    ctx.fillText(girl.name, girl.x, girl.y - imgSize/2 - 10);
+
+    // Espada de KIKI
+    if(player.attacking && world.enemies.length>0){
+        let nearest = world.enemies.reduce((a,b)=> dist(player,b)<dist(player,a)?b:a, world.enemies[0]);
+        let angle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.rotate(angle);
+        ctx.drawImage(swordImg, 0, -16, 32, 32);
+        ctx.restore();
+    }
+
+    ctx.globalAlpha=0.1; ctx.beginPath(); ctx.arc(player.x,player.y,30,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
+
+    if(world.win){
+      const hx=(player.x+girl.x)/2;
+      const hy=(player.y+girl.y)/2-20;
+      ctx.fillStyle='pink';
+      ctx.beginPath();
+      const size=50*world.heartScale;
+      ctx.moveTo(hx, hy);
+      ctx.bezierCurveTo(hx, hy-size/2, hx-size, hy-size/2, hx-size, hy);
+      ctx.bezierCurveTo(hx-size, hy+size/2, hx, hy+size, hx, hy+10+size);
+      ctx.bezierCurveTo(hx, hy+size, hx+size, hy+size/2, hx+size, hy);
+      ctx.bezierCurveTo(hx+size, hy-size/2, hx, hy-size/2, hx, hy);
+      ctx.fill();
+
+      ctx.fillStyle='#fff'; ctx.font='32px system-ui, sans-serif'; ctx.textAlign='center'; ctx.fillText('¡GANASTE!', hx, hy-70);
+      canvas.addEventListener('click',()=>{ window.location.href='pareja.html'; }, {once:true});
+    }
+  }
+
+  function loop(now){
+    const dt=Math.min(0.033,(now-last)/1000);
+    last=now;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

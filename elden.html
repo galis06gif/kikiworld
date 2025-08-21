@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kiki el Constructor</title>
+<script>
+if(sessionStorage.getItem("accessGranted") !== "true"){
+    window.location.href = "check.html";
+}
+</script>
+
+<style>
+  :root { --bg:#0e1117; --panel:#161b22; --text:#e6edf3; }
+  html, body { height:100%; margin:0; background:linear-gradient(180deg, #0b0e14, #11151c); color:var(--text); font-family:system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial; }
+  .wrap { display:grid; place-items:center; min-height:100%; gap:14px; padding:16px; }
+  canvas { background: radial-gradient(100% 130% at 50% -10%, rgba(255,255,255,0.06), rgba(255,255,255,0) 60%), repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0 8px, rgba(255,255,255,0.00) 8 16px); box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.05); border-radius:16px; image-rendering:pixelated; }
+  .hud { background:color-mix(in oklab, var(--panel) 88%, transparent); padding:10px 14px; border-radius:12px; box-shadow:0 4px 14px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.06); }
+  .keys { opacity:.9; font-size:14px; }
+  .bar { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  .pill { padding:6px 10px; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); }
+  .footer { font-size:12px; opacity:.7; }
+  @media (max-width: 700px){ canvas { width: 95vw; height: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <canvas id="game" width="960" height="540" aria-label="Juego estilo Minecraft top-down"></canvas>
+  <div class="hud">
+    <div class="bar">
+      <div class="pill">HP: <span id="hp">10</span></div>
+      <div class="pill">Madera: <span id="wood">0</span></div>
+      <div class="pill">Hierro: <span id="iron">0</span></div>
+      <div class="pill">Haz una Espada: <kbd>C</kbd> (5 madera, 2 hierro)</div>
+      <div class="pill">Ganar: Ponte junto a la espada y da <kbd>Enter</kbd></div>
+    </div>
+    <div class="keys">Mover: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> • Atacar: Click • Reiniciar: <kbd>R</kbd></div>
+  </div>
+  <div class="footer">Mini demo sin dependencias. Exporta y sube como <code>index.html</code>.</div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const rand = (a,b)=>Math.random()*(b-a)+a;
+  const irand = (a,b)=>Math.floor(rand(a,b+1));
+  const clamp = (v,min,max)=>Math.max(min, Math.min(max, v));
+  const WIDTH = canvas.width, HEIGHT = canvas.height;
+
+  const keys = new Set();
+  addEventListener('keydown', e => { keys.add(e.key.toLowerCase()); if (['w','a','s','d',' '].includes(e.key.toLowerCase())) e.preventDefault(); });
+  addEventListener('keyup',   e => { keys.delete(e.key.toLowerCase()); });
+  const mouse = { x: WIDTH/2, y: HEIGHT/2, click:false };
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    mouse.x = (e.clientX - rect.left) * scaleX;
+    mouse.y = (e.clientY - rect.top)  * scaleY;
+  });
+  canvas.addEventListener('mousedown', e => { mouse.click = true; });
+  addEventListener('mouseup', e => { mouse.click = false; });
+
+  const world = {
+    woodNeeded: 5,
+    ironNeeded: 2,
+    items: [],
+    enemies: [],
+    rocks: [],
+    trees: [],
+    sword: null,
+    particles: [],
+    gameOver: false,
+    win: false,
+    time: 0
+  };
+
+  const player = { x: WIDTH/2, y: HEIGHT/2, r:10, speed:160, hp:10, maxhp:10, range:38, dmg:3, cd:0, inv:{wood:0, iron:0} };
+
+  function spawnTrees(n){ for(let i=0;i<n;i++) world.trees.push({x:rand(40,WIDTH-40), y:rand(40,HEIGHT-40), hp:5, r:12}); }
+  function spawnRocks(n){ for(let i=0;i<n;i++) world.rocks.push({x:rand(40,WIDTH-40), y:rand(40,HEIGHT-40), hp:6, r:11}); }
+  function spawnEnemies(n){ for(let i=0;i<n;i++) world.enemies.push({x:rand(40,WIDTH-40), y:rand(40,HEIGHT-40), r:10, hp:6, spd:rand(60,90), touch:2, t:0}); }
+  function dropItem(x,y,type){ world.items.push({x,y,r:6,type,t:0}); }
+
+  function reset(){
+    world.items.length = 0; world.enemies.length = 0; world.rocks.length = 0; world.trees.length = 0;
+    world.sword = null; world.particles.length = 0; world.gameOver = false; world.win = false;
+    player.x = WIDTH/2; player.y = HEIGHT/2; player.hp = player.maxhp; player.inv.wood=0; player.inv.iron=0;
+    spawnTrees(10); spawnRocks(7); spawnEnemies(5);
+  }
+  reset();
+
+  function update(dt){
+    world.time += dt;
+    if(world.gameOver || world.win) return;
+    let mx=(keys.has('d')?1:0)-(keys.has('a')?1:0);
+    let my=(keys.has('s')?1:0)-(keys.has('w')?1:0);
+    const len=Math.hypot(mx,my)||1; mx/=len; my/=len;
+    player.x=clamp(player.x+mx*player.speed*dt,16,WIDTH-16);
+    player.y=clamp(player.y+my*player.speed*dt,16,HEIGHT-16);
+
+    player.cd = Math.max(0, player.cd-dt);
+    if(mouse.click && player.cd<=0){
+      player.cd=0.25;
+      const candidates=[...world.enemies.map(e=>({type:'enemy',ref:e})), ...world.trees.map(t=>({type:'tree',ref:t})), ...world.rocks.map(r=>({type:'rock',ref:r}))];
+      let best=null, bestD=Infinity;
+      for(const c of candidates){ const d=Math.hypot(c.ref.x-player.x,c.ref.y-player.y); if(d<player.range && d<bestD){best=c; bestD=d;} }
+      if(best){
+        const o=best.ref;
+        for(let i=0;i<6;i++) world.particles.push({x:o.x, y:o.y, vx:rand(-60,60), vy:rand(-60,60), life:0.25});
+        if(best.type==='enemy'){ o.hp-=player.dmg; if(o.hp<=0){ dropItem(o.x,o.y,Math.random()<0.5?'wood':'iron'); world.enemies.splice(world.enemies.indexOf(o),1); } }
+        else if(best.type==='tree'){ o.hp-=player.dmg; if(o.hp<=0){ for(let i=0;i<irand(1,3);i++) dropItem(o.x+rand(-6,6),o.y+rand(-6,6),'wood'); world.trees.splice(world.trees.indexOf(o),1); } }
+        else if(best.type==='rock'){ o.hp-=player.dmg; if(o.hp<=0){ for(let i=0;i<irand(1,2);i++) dropItem(o.x+rand(-6,6),o.y+rand(-6,6),'iron'); world.rocks.splice(world.rocks.indexOf(o),1); } }
+      }
+    }
+
+    for(const e of world.enemies){ e.t+=dt; const ang=Math.atan2(player.y-e.y,player.x-e.x); e.x+=Math.cos(ang)*e.spd*dt; e.y+=Math.sin(ang)*e.spd*dt; if(Math.hypot(e.x-player.x,e.y-player.y)<e.r+player.r) player.hp-=e.touch*dt; }
+
+    for(let i=world.items.length-1;i>=0;i--){ const it=world.items[i]; it.t+=dt; if(Math.hypot(it.x-player.x,it.y-player.y)<player.r+it.r){ if(it.type==='wood') player.inv.wood++; else if(it.type==='iron') player.inv.iron++; world.items.splice(i,1); } }
+
+    for(let i=world.particles.length-1;i>=0;i--){ const p=world.particles[i]; p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; if(p.life<=0) world.particles.splice(i,1); }
+
+    if(keys.has('c') && !world.sword && player.inv.wood>=world.woodNeeded && player.inv.iron>=world.ironNeeded){
+      player.inv.wood -= world.woodNeeded; player.inv.iron -= world.ironNeeded;
+      world.sword = { x: player.x + 48, y: player.y, r:14 };
+    }
+
+    if(world.sword && Math.hypot(world.sword.x-player.x, world.sword.y-player.y)<world.sword.r+player.r+4 && keys.has('enter')){
+      world.win = true;
+    }
+
+    if(player.hp<=0) world.gameOver=true;
+    if(keys.has('r')) reset();
+
+    document.getElementById('hp').textContent=Math.max(0,player.hp).toFixed(0);
+    document.getElementById('wood').textContent=player.inv.wood;
+    document.getElementById('iron').textContent=player.inv.iron;
+  }
+
+  let blinkTime = 0;
+  function draw(){
+    ctx.clearRect(0,0,WIDTH,HEIGHT);
+    ctx.save(); ctx.globalAlpha=0.25; grid(40, world.time*4, world.time*2); ctx.globalAlpha=0.15; grid(20,-world.time*6, world.time*3); ctx.restore();
+
+    for(const tr of world.trees){ drawTree(tr.x,tr.y,tr.r); if(tr.hp<5) bar(tr.x,tr.y-18,tr.hp/5); }
+    for(const rk of world.rocks){ drawRock(rk.x,rk.y,rk.r); if(rk.hp<6) bar(rk.x,rk.y-18,rk.hp/6); }
+    if(world.sword) drawSword(world.sword.x, world.sword.y, world.sword.r);
+    for(const it of world.items) drawItem(it.x,it.y,it.type);
+    for(const e of world.enemies){ drawEnemy(e.x,e.y,e.r); if(e.hp<6) bar(e.x,e.y-18,e.hp/6); }
+    drawPlayer(player.x,player.y);
+    ctx.globalAlpha=0.1; ctx.beginPath(); ctx.arc(player.x,player.y,player.range,0,Math.PI*2); ctx.fillStyle='#ffffff'; ctx.fill(); ctx.globalAlpha=1;
+
+    ctx.globalAlpha=0.8; ctx.fillStyle='#ffd166'; for(const p of world.particles) ctx.fillRect(p.x-2,p.y-2,4,4); ctx.globalAlpha=1;
+
+    if(world.gameOver) banner('Has sido derrotado','Pulsa R para reiniciar');
+    else if(world.win) banner('¡Ganaste!','Presiona Enter para avanzar');
+  }
+
+  function grid(size, ox, oy){ ctx.fillStyle='#0c1220'; ctx.fillRect(0,0,WIDTH,HEIGHT); ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1; ctx.beginPath(); for(let x=((ox%size)+size)%size;x<WIDTH;x+=size){ctx.moveTo(x,0);ctx.lineTo(x,HEIGHT);} for(let y=((oy%size)+size)%size;y<HEIGHT;y+=size){ctx.moveTo(0,y);ctx.lineTo(WIDTH,y);} ctx.stroke(); }
+  function bar(x,y,p){ p=clamp(p,0,1); ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(x-16,y-4,32,6); ctx.fillStyle='#22c55e'; ctx.fillRect(x-16,y-4,32*p,6); ctx.strokeStyle='rgba(255,255,255,.2)'; ctx.strokeRect(x-16,y-4,32,6); }
+  
+  function drawPlayer(x,y){ ctx.fillStyle='#f5e1d2'; ctx.beginPath(); ctx.arc(x, y-8, 10, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#1e1e1e'; ctx.fillRect(x-10, y-18, 20, 8); ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.strokeRect(x-8,y-12,6,6); ctx.strokeRect(x+2,y-12,6,6); ctx.beginPath(); ctx.moveTo(x-2,y-9); ctx.lineTo(x+2,y-9); ctx.stroke(); ctx.fillStyle='#4678c8'; ctx.fillRect(x-7,y-2,14,16); }
+  function drawEnemy(x,y,r){ ctx.fillStyle='#a33c3c'; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#000'; ctx.font='10px monospace'; ctx.fillText('EN',x-8,y-12); }
+  function drawTree(x,y,r){ ctx.fillStyle='#3f8a3f'; ctx.beginPath(); ctx.arc(x,y-6,r+2,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#6b4a2e'; ctx.fillRect(x-3,y-6,6,r+10); }
+  function drawRock(x,y,r){ ctx.fillStyle='#7e828e'; ctx.beginPath(); ctx.moveTo(x-r,y); ctx.lineTo(x-r/2,y-r); ctx.lineTo(x+r/2,y-r/2); ctx.lineTo(x+r,y); ctx.lineTo(x,y+r/2); ctx.closePath(); ctx.fill(); }
+  function drawItem(x,y,type){ ctx.fillStyle = type==='wood'?'#a0522d':'#b0c4de'; ctx.fillRect(x-4,y-4,8,8); }
+  function drawSword(x,y,r){ ctx.fillStyle='#808080'; ctx.fillRect(x-4,y-14,8,28); ctx.fillStyle='#b0c4de'; ctx.fillRect(x-2,y-12,4,24); ctx.fillStyle='#ffd700'; ctx.fillRect(x-6,y-2,16,4); }
+
+  function banner(title,msg){
+    ctx.fillStyle='rgba(0,0,0,.65)'; ctx.fillRect(WIDTH/2-160,HEIGHT/2-50,320,100);
+    ctx.fillStyle='#fff'; ctx.font='20px monospace'; ctx.textAlign='center'; ctx.fillText(title,WIDTH/2,HEIGHT/2-10);
+    if(world.win){
+      blinkTime += 1/60; const alpha=Math.abs(Math.sin(blinkTime*3)); ctx.globalAlpha=alpha;
+      ctx.font='16px monospace'; ctx.fillText(msg,WIDTH/2,HEIGHT/2+20); ctx.globalAlpha=1;
+    } else ctx.font='16px monospace'; ctx.fillText(msg,WIDTH/2,HEIGHT/2+20);
+  }
+
+  let last = performance.now();
+  function loop(now){ const dt=Math.min(0.033,(now-last)/1000); last=now; update(dt); draw(); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
+
+  addEventListener('keydown', e => { if(e.key.toLowerCase()==='enter' && world.win) window.location.href='gana.html'; });
+})();
+</script>
+</body>
+</html>
